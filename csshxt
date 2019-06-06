@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set_window_keybinds () {
+	tmux bind-key C-s run-shell "tmux setw synchronize-panes; tmux display \"synchronize-panes turned #{?pane_synchronized,off,on}\""
+	tmux bind-key C-x display-panes -d 0 \\\; command-prompt -I "#P" -p "pane:" "select-pane -t '%%'"
+}
+
+
+# create new window and send first ssh command without tiling
+tmux new-window -n "csshxt" "ssh $1"
+shift 1
+
+while [ "$#" -gt 0 ]; do
+	# send ssh command and split window
+	tmux split-window "ssh $1"
+	tmux select-layout tiled
+	shift 1
+done
+
+tmux setw synchronize-panes on
+set_window_keybinds
