@@ -1,21 +1,27 @@
 #!/bin/sh
 
+SSH_COMMAND="ssh"
+
 set_window_keybinds () {
-	tmux bind-key C-s run-shell "tmux setw synchronize-panes; tmux display \"synchronize-panes turned #{?pane_synchronized,off,on}\""
-	tmux bind-key C-x display-panes -d 0 \\\; command-prompt -I "#P" -p "pane:" "select-pane -t '%%'"
+	# toggle pane synchronization
+	tmux bind-key C-s setw synchronize-panes \\\; display \"synchronize-panes turned #{?pane_synchronized,off,on}\""
+	# select-pane mode with ability for navigating above pane 9
+	tmux bind-key C-x display-panes -d 0 \\\; command-prompt -I '#P' -p 'pane:' 'select-pane -t "%1"' \\\; last-pane
 }
 
-
 # create new window and send first ssh command without tiling
-tmux new-window -n "csshxt" "ssh $1"
+tmux new-window -n "csshxt" "$SSH_COMMAND $1"
 shift 1
 
+# walk through cmdline args and start a new session for each one
 while [ "$#" -gt 0 ]; do
 	# send ssh command and split window
-	tmux split-window "ssh $1"
+	tmux split-window "$SSH_COMMAND $1"
 	tmux select-layout tiled
 	shift 1
 done
 
+# default to synchronized panes
 tmux setw synchronize-panes on
+
 set_window_keybinds
