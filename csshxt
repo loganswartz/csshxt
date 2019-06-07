@@ -1,12 +1,21 @@
 #!/bin/sh
 
+# User configuration constants
 SSH_COMMAND="ssh"
+
+# Hotkeys
+PANE_SYNCH_KEY="C-s"
+PANE_SELECT_KEY="C-x"
+PANE_DISABLE_KEY="C-d"
+PANE_ENABLE_KEY="C-e"
 
 set_window_keybinds () {
 	# toggle pane synchronization
-	tmux bind-key C-s setw synchronize-panes \\\; display \"synchronize-panes turned #{?pane_synchronized,off,on}\""
+	tmux bind-key $PANE_SYNCH_KEY setw synchronize-panes \\\; display 'synchronize-panes turned #{?pane_synchronized,on,off}' \\\; select-pane -t.{bottom}
 	# select-pane mode with ability for navigating above pane 9
-	tmux bind-key C-x display-panes -d 0 \\\; command-prompt -I '#P' -p 'pane:' 'select-pane -t "%1"' \\\; last-pane
+	tmux bind-key $PANE_SELECT_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'jump to:' 'select-pane -t "%1"' \\\; last-pane \\\; setw synchronize-panes off
+	tmux bind-key $PANE_DISABLE_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'disable:' 'select-pane -t "%1" -d' \\\; last-pane
+	tmux bind-key $PANE_ENABLE_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'enable:' 'select-pane -t "%1" -e' \\\; last-pane
 }
 
 # create new window and send first ssh command without tiling
@@ -21,7 +30,15 @@ while [ "$#" -gt 0 ]; do
 	shift 1
 done
 
+# currently have to kill this with <prefix>-x since we've disabled SIGINT
+tmux split-window -f -l 1 'trap "" 2; while [ 1 ]; do :; done'
+
 # default to synchronized panes
 tmux setw synchronize-panes on
 
+# enable keybinds
 set_window_keybinds
+
+
+# the hook below might be able to be tweaked to close the window if only a single pane remains
+#set-hook pane-exited 'if-shell "return $([ $(($(tmux list-panes -t:csshxt | wc -l))) -gt 1 ])" "kill-window -t:csshxt"'
