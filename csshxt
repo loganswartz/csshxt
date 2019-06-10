@@ -31,7 +31,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 # currently have to kill this with <prefix>-x since we've disabled SIGINT
-tmux split-window -f -l 1 'trap "" 2; while [ 1 ]; do :; done'
+tmux split-window -f -l 1 'trap "" 2; while [ 1 ]; do read input; done'
 
 # default to synchronized panes
 tmux setw synchronize-panes on
