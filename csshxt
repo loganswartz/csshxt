@@ -1,21 +1,50 @@
 #!/bin/sh
 
-# User configuration constants
-SSH_COMMAND="ssh"
+DEFAULT_CONFIG="$HOME/.csshxt"
+
+if [ -f "$DEFAULT_CONFIG" ]; then
+	source "$DEFAULT_CONFIG"
+else
+	printf '#!/bin/sh
+
+# Configuration
+SSH_COMMAND="ssh"  # instead of changing this, first try using the ssh config file (~/.ssh/config) to use advanced ssh options for connections.
+
+# Visual appearance
+BROADCAST_PROMPT_TITLE_SHOW=1  # if set to 1, the broadcast prompt will show "Broadcast input:" at the top of it
+BROADCAST_PROMPT_BG_COLOR="red"  # "default" to disable color, otherwise takes ANSI colors in the format of "colour#"
+DISABLED_PANE_DIM=1  # if 1, apply the "dim" style to disabled panes (disabled automatically if your terminal doesn'\''t support it.)
+DISABLED_PANE_BG_COLOR="black"  # If your terminal doesn'\''t support dimming or you have DISABLED_PANE_DIM set to 0, these colors will be used to allow you to manually dim (or choose your own colors)
+DISABLED_PANE_FG_COLOR="colour8"
 
 # Hotkeys
 PANE_SYNCH_KEY="C-s"
 PANE_SELECT_KEY="C-x"
 PANE_DISABLE_KEY="C-d"
-PANE_ENABLE_KEY="C-e"
+PANE_ENABLE_KEY="C-e"' > "$DEFAULT_CONFIG"
+	echo "New config file created at '$DEFAULT_CONFIG'." && sleep 1s # give a chance to see the message
+	source "$DEFAULT_CONFIG"
+fi
+
+
+TERM_DIM_COMPATIBLE=$(($(tput dim > /dev/null 2>&1; echo "$?")))
+if [ $DISABLED_PANE_DIM -eq 1 ] && [ $TERM_DIM_COMPATIBLE -eq 0 ]; then
+	D_PANE_BG=""
+	D_PANE_FG=""
+	D_DIM="dim"
+else
+	D_PANE_BG="bg=$DISABLED_PANE_BG_COLOR"
+	D_PANE_FG="fg=$DISABLED_PANE_FG_COLOR"
+	D_DIM=""
+fi
 
 set_window_keybinds () {
 	# toggle pane synchronization
 	tmux bind-key $PANE_SYNCH_KEY setw synchronize-panes \\\; display 'synchronize-panes turned #{?pane_synchronized,on,off}' \\\; select-pane -t.{bottom}
 	# select-pane mode with ability for navigating above pane 9
 	tmux bind-key $PANE_SELECT_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'jump to:' 'select-pane -t "%1"' \\\; last-pane \\\; setw synchronize-panes off
-	tmux bind-key $PANE_DISABLE_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'disable:' 'select-pane -t "%1" -d' \\\; last-pane
-	tmux bind-key $PANE_ENABLE_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'enable:' 'select-pane -t "%1" -e' \\\; last-pane
+	tmux bind-key $PANE_DISABLE_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'disable:' "select-pane -t \"%1\" -d ; select-pane -t \"%1\" -P \"$D_PANE_BG,$D_PANE_FG,$D_DIM\"" \\\; last-pane
+	tmux bind-key $PANE_ENABLE_KEY display-panes -d 0 \\\; command-prompt -I '#P' -p 'enable:' 'select-pane -t "%1" -e ; select-pane -t "%1" -P "none"' \\\; last-pane
 }
 
 # create new window and send first ssh command without tiling
@@ -30,8 +59,15 @@ while [ "$#" -gt 0 ]; do
 	shift 1
 done
 
-# currently have to kill this with <prefix>-x since we've disabled SIGINT
-tmux split-window -f -l 1 'trap "" 2; while [ $(($(tmux list-panes | wc -l))) -gt 1 ]; do read -s -t 1 input; done'
+if [ $BROADCAST_PROMPT_TITLE_SHOW -eq 1 ]; then
+	# for some reason, a SIGINT or SIGTERM will occasionally still get through and break the loop, so this is the best I've got.
+	# if you have a better way of creating a window that does literally nothing and never exits, let me know
+	# (If I ever figure out how to use tmux's posthooks correctly, I might be able to solve this problem more elegantly and robustly by SIGKILLing the last pane when only it remains)
+	tmux split-window -f -l 2 'trap "" SIGINT SIGTERM; echo "Broadcast input:"; stty -echo; while [ $(($(trap "" SIGINT SIGTERM && tmux list-panes | wc -l))) -gt 1 ]; do sleep 1; done'
+else
+	tmux split-window -f -l 1 'trap "" SIGINT SIGTERM; stty -echo; while [ $(($(trap "" SIGINT SIGTERM && tmux list-panes | wc -l))) -gt 1 ]; do sleep 1; done'
+fi
+tmux select-pane -t:.{bottom} -P "bg=$BROADCAST_PROMPT_BG_COLOR"
 
 # default to synchronized panes
 tmux setw synchronize-panes on
@@ -42,3 +78,5 @@ set_window_keybinds
 
 # the hook below might be able to be tweaked to close the window if only a single pane remains
 #set-hook pane-exited 'if-shell "return $([ $(($(tmux list-panes -t:csshxt | wc -l))) -gt 1 ])" "kill-window -t:csshxt"'
+# may be able to use this command in the future to cut out (a little of) the hackery in the currently implemented pane hotkeys
+#tmux display-panes -d 0 'command-prompt -I "#(tmux display -t %% \"#P\")" -p "jump to:" "select-pane -t \"\%1\""'
